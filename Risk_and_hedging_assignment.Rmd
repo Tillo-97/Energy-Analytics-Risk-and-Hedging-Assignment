@@ -1,0 +1,70 @@
+##Part 2
+
+```{r}
+#Read the data file
+price.data <- read.csv("Data for risk and hedging assignment1.csv")
+
+#Create new numeric data to represent the selling and buying prices
+selling.price <- price.data$electricity.price..GBP.per.MWh.
+buying.price <- price.data$gas.price..pence.per.therm.
+
+#Calculate the mean and variance
+selling.price.mean = mean(selling.price)
+buying.price.mean = mean(buying.price)
+selling.price.var <- var(selling.price)
+buying.price.var <- var(buying.price)
+
+#Calculate the covariance
+cov1 <- cov(selling.price, buying.price)
+
+#Create a covariance matrix between buying and selling price
+cov.matrix <- matrix(data = c(buying.price.var, cov1, cov1, selling.price.var), 2, 2)
+```
+
+```{r}
+library(MASS)
+
+#Generate a random sample of 10,000 observations from the multivariate normal distribution
+rnd.sample <- as.data.frame(mvrnorm(10000, c(buying.price.mean, selling.price.mean), cov.matrix, empirical = TRUE))
+
+#Change the names of the columns
+names(rnd.sample) <- c("buy.price", "sell.price")
+
+#Calculate the revenues, costs and losses for each observation
+rnd.sample$revenue <- 8400*rnd.sample$sell.price
+rnd.sample$cost <- 150000 + (250000*0.5) + (271127.048*(rnd.sample$buy.price/100))
+rnd.sample$loss2 <- rnd.sample$cost - rnd.sample$revenue
+
+#Plot a histogram showing the distribution of the losses
+hist(rnd.sample$loss2)
+
+#Calculate the Value at Risk
+VaR95 <- quantile(rnd.sample$loss2, 0.95)
+
+#Calculate the expected shortfall
+rnd.sample$max1 <- sapply(rnd.sample$loss2, function(x){max(x-VaR95, 0)})
+ES <- VaR95 + (1/(1-0.95))*mean(rnd.sample$max1)
+```
+##Part 3
+```{r}
+#Create a model for when outages occur
+outage.days <- rbinom((nrow(rnd.sample)), 1, 0.04) > 0
+rnd.sample$outage.days <- outage.days
+
+
+#The losses will remain the same as it was in part 2
+rnd.sample$loss3 <- rnd.sample$loss2
+
+#Calculate the revenues, costs and losses for each observation where an outage occurs
+#rnd.sample$revenue3 <- if (rnd.sample$loss3[outage.days == FALSE]) { 
+#                        8400 * rnd.sample$sell.price
+ #                     } else {
+ #                       4600 * rnd.sample$sell.price
+ #                     }
+#rnd.sample$cost[outage.days] <- 150000 + (250000*0.5) + (271127.048*(rnd.sample$buy.price/100))
+#rnd.sample$loss3[outage.days] <- rnd.sample$cost - rnd.sample$revenue
+
+
+#rnd.sample$loss3[outage.days]
+```
+
