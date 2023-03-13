@@ -1,6 +1,14 @@
 ##Part 2
 
 ```{r}
+#Import all libraries
+library(MASS)
+library(openxlsx)
+library(DEoptim)
+```
+
+
+```{r}
 #Read the data file
 price.data <- read.csv("Data for risk and hedging assignment1.csv")
 
@@ -19,52 +27,112 @@ cov1 <- cov(selling.price, buying.price)
 
 #Create a covariance matrix between buying and selling price
 cov.matrix <- matrix(data = c(buying.price.var, cov1, cov1, selling.price.var), 2, 2)
+cov.matrix
 ```
 
 ```{r}
-library(MASS)
-
 #Generate a random sample of 10,000 observations from the multivariate normal distribution
 rnd.sample <- as.data.frame(mvrnorm(10000, c(buying.price.mean, selling.price.mean), cov.matrix, empirical = TRUE))
+```
+
+
+```{r}
+#Store the random sample as a fixed data frame
+sample1 <- rnd.sample
 
 #Change the names of the columns
-names(rnd.sample) <- c("buy.price", "sell.price")
+names(sample1) <- c("buy.price", "sell.price")
 
 #Calculate the revenues, costs and losses for each observation
-rnd.sample$revenue <- 8400*rnd.sample$sell.price
-rnd.sample$cost <- 150000 + (250000*0.5) + (271127.048*(rnd.sample$buy.price/100))
-rnd.sample$loss2 <- rnd.sample$cost - rnd.sample$revenue
+sample1$revenue2 <- 8400*sample1$sell.price
+sample1$cost2 <- 150000 + (250000*0.5) + (271127.048*(sample1$buy.price/100))
+sample1$loss2 <- sample1$cost2 - sample1$revenue2
 
 #Plot a histogram showing the distribution of the losses
-hist(rnd.sample$loss2)
+hist(sample1$loss2)
 
 #Calculate the Value at Risk
-VaR95 <- quantile(rnd.sample$loss2, 0.95)
+VaR95.2 <- quantile(sample1$loss2, 0.95)
 
 #Calculate the expected shortfall
-rnd.sample$max1 <- sapply(rnd.sample$loss2, function(x){max(x-VaR95, 0)})
-ES <- VaR95 + (1/(1-0.95))*mean(rnd.sample$max1)
+max2 <- sapply(sample1$loss2, function(x){max(x-VaR95.2, 0)})
+ES2 <- VaR95.2 + (1/(1-0.95))*mean(max2)
+
+VaR95.2
+ES2
 ```
 ##Part 3
+
 ```{r}
-#Create a model for when outages occur
-outage.days <- rbinom((nrow(rnd.sample)), 1, 0.04) > 0
-rnd.sample$outage.days <- outage.days
+#Create a model for when outages occur and a new column for the outage days
+sample1$outage.days <- rbinom((nrow(sample1)), 1, 0.04) > 0
+```
 
 
-#The losses will remain the same as it was in part 2
-rnd.sample$loss3 <- rnd.sample$loss2
-
+```{r}
 #Calculate the revenues, costs and losses for each observation where an outage occurs
-#rnd.sample$revenue3 <- if (rnd.sample$loss3[outage.days == FALSE]) { 
-#                        8400 * rnd.sample$sell.price
- #                     } else {
- #                       4600 * rnd.sample$sell.price
- #                     }
-#rnd.sample$cost[outage.days] <- 150000 + (250000*0.5) + (271127.048*(rnd.sample$buy.price/100))
-#rnd.sample$loss3[outage.days] <- rnd.sample$cost - rnd.sample$revenue
+sample1$revenue3 <- ifelse(!sample1$outage.days, 8400 * sample1$sell.price, 4200 * sample1$sell.price)
+
+sample1$cost3 <- 150000 + (250000*0.5) + ifelse(!sample1$outage.days, (271127.048*(sample1$buy.price/100)), (10563.524*(sample1$buy.price/100)))
+
+sample1$loss3 <- sample1$cost3 - sample1$revenue3
+
+#Plot a histogram showing the distribution of the losses
+hist(sample1$loss3)
+
+#Calculate the Value at Risk
+VaR95.3 <- quantile(sample1$loss3, 0.95)
+
+#Calculate the expected shortfall
+max3 <- sapply(sample1$loss3, function(x){max(x-VaR95.3, 0)})
+ES3 <- VaR95.3 + (1/(1-0.95))*mean(max3)
+
+VaR95.3
+ES3
+```
+```{r}
+#Create an excel file with sample1 data
+write.xlsx(sample1, "Sample1.xlsx", sheetName = "Results", rowNames = FALSE)
+```
 
 
-#rnd.sample$loss3[outage.days]
+##Part 4
+```{r}
+#Create a function to represent the Expected Shortfall which we want to minimize
+ES4 <- function(argvector) {
+  QE = argvector[1]
+  QG = argvector[2]
+  if(QE<0||QG<0||QE>8400||QG>271127.048) {return(Inf)}
+  #Calculate the revenues, costs and losses for each observation where an outage occurs
+  revenue4 <- ifelse(!sample1$outage.days, (8400-QE) * sample1$sell.price + (QE*50), (4200-QE) * sample1$sell.price + (QE*50))
+  
+  cost4 <- 150000 + (250000*0.5) + ifelse(!sample1$outage.days, ((271127.048-QG)*(sample1$buy.price/100) +(QG*0.5)), ((10563.524-QG)*(sample1$buy.price/100) +(QG*0.5)))
+  
+  loss4 <- cost4 - revenue4
+  
+  #Calculate the Value at Risk
+  VaR95.4 <- quantile(loss4, 0.95)
+  
+  #Calculate the expected shortfall
+  max4 <- sapply(loss4, function(x) {max(x-VaR95.4, 0)})
+  return(VaR95.4 + (1/(1-0.95))*mean(max4)) 
+}
+
+#Differential Evolution Optimization
+ESoptim.DE <- DEoptim(ES4, lower = c(0,0), upper = c(8400, 271127.048))
+```
+
+```{r}
+#General-purpose Optimization
+ESoptim.nm <- optim(c(4200, 135000), ES4, method = "Nelder-Mead")
+```
+
+```{r}
+#Differential Evolution Optimization Results
+ESoptim.DE$optim
+
+#General-purpose Optimization Results
+ESoptim.nm$par
+ESoptim.nm$value
 ```
 
